@@ -1,9 +1,10 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { ControlPanel } from './components/ControlPanel';
 import { StoryboardPreview } from './components/StoryboardPreview';
 import { generateFullStoryboard, regenerateFrameImage, regenerateStoryboardText } from './services/geminiService';
 import { AspectRatio, StoryboardResult, UploadMode, MusicStyle } from './types';
 import { ImageModal } from './components/ImageModal';
+import { ApiKeyModal } from './components/ApiKeyModal';
 
 const App: React.FC = () => {
   const [storyboardResult, setStoryboardResult] = useState<StoryboardResult | null>(null);
@@ -13,9 +14,39 @@ const App: React.FC = () => {
   const [progressPercent, setProgressPercent] = useState<number>(0);
   const [lastRequest, setLastRequest] = useState<any>(null);
 
-  // --- New states for granular control ---
   const [viewingImage, setViewingImage] = useState<string | null>(null);
   const [regeneratingFrameId, setRegeneratingFrameId] = useState<number | null>(null);
+
+  const [apiKey, setApiKey] = useState<string | null>(null);
+  const [isKeyModalOpen, setIsKeyModalOpen] = useState<boolean>(false);
+
+  useEffect(() => {
+    const storedKey = sessionStorage.getItem('openrouter_api_key');
+    if (storedKey) {
+      setApiKey(storedKey);
+    } else {
+      setIsKeyModalOpen(true);
+    }
+  }, []);
+
+  const handleSaveApiKey = (key: string) => {
+    setApiKey(key);
+    sessionStorage.setItem('openrouter_api_key', key);
+    setIsKeyModalOpen(false);
+  };
+  
+  const handleApiError = (e: any) => {
+    console.error(e);
+    const errorMessage = e.message || 'An unknown error occurred.';
+    if (errorMessage.includes('401') || errorMessage.includes('authentication')) {
+        setError('API Key tidak valid atau salah. Silakan masukkan kembali.');
+        sessionStorage.removeItem('openrouter_api_key');
+        setApiKey(null);
+        setIsKeyModalOpen(true);
+    } else {
+        setError(`Terjadi kesalahan: ${errorMessage}`);
+    }
+  }
 
   const fileToBase64 = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -38,12 +69,17 @@ const App: React.FC = () => {
     uploadMode: UploadMode;
     musicStyle: MusicStyle | null;
   }) => {
+    if (!apiKey) {
+      setError("API Key OpenRouter dibutuhkan untuk generate storyboard.");
+      setIsKeyModalOpen(true);
+      return;
+    }
     setIsLoading(true);
     setError(null);
     setStoryboardResult(null);
     setProgress('Mempersiapkan aset...');
     setProgressPercent(0);
-    setLastRequest(data); // Save file-based request for now
+    setLastRequest(data);
 
     const onProgressUpdate = (message: string, currentStep: number, totalSteps: number) => {
         setProgress(message);
@@ -64,25 +100,22 @@ const App: React.FC = () => {
         combinedImage: combinedImageBase64
       };
       
-      // Save the version with base64 strings for regeneration
       setLastRequest(requestData);
 
-      // FIX: Removed apiKey argument
-      const result = await generateFullStoryboard(requestData, onProgressUpdate);
+      const result = await generateFullStoryboard(requestData, apiKey, onProgressUpdate);
       
       setStoryboardResult(result);
     } catch (e: any) {
-      console.error(e);
-      setError(`Terjadi kesalahan: ${e.message}`);
+      handleApiError(e);
     } finally {
       setIsLoading(false);
       setProgress('');
       setProgressPercent(0);
     }
-  }, []);
+  }, [apiKey]);
   
   const handleRegenerateFrame = useCallback(async (frameId: number) => {
-    if (!lastRequest || !storyboardResult) return;
+    if (!apiKey || !lastRequest || !storyboardResult) return;
 
     const frameToRegen = storyboardResult.frames.find(f => f.id === frameId);
     if (!frameToRegen) return;
@@ -91,10 +124,10 @@ const App: React.FC = () => {
     setError(null);
 
     try {
-        // FIX: Removed apiKey argument
         const newImageUrl = await regenerateFrameImage(
             { sceneDescription: frameToRegen.sceneDescription, cameraAngle: frameToRegen.cameraAngle },
-            lastRequest
+            lastRequest,
+            apiKey
         );
         
         setStoryboardResult(prevResult => {
@@ -106,33 +139,31 @@ const App: React.FC = () => {
         });
 
     } catch (e: any) {
-        console.error(e);
-        setError(`Gagal membuat ulang frame ${frameId}: ${e.message}`);
+        handleApiError(e);
     } finally {
         setRegeneratingFrameId(null);
     }
-  }, [lastRequest, storyboardResult]);
+  }, [apiKey, lastRequest, storyboardResult]);
 
   const handleRegenerateText = useCallback(async () => {
-    if (!lastRequest) return;
+    if (!apiKey || !lastRequest) return;
     
     setIsLoading(true);
     setError(null);
     
     try {
-        // FIX: Removed apiKey argument
-        const { hook, fullScript, musicPrompt } = await regenerateStoryboardText(lastRequest);
+        const { hook, fullScript, musicPrompt } = await regenerateStoryboardText(lastRequest, apiKey);
         setStoryboardResult(prev => prev ? {...prev, hook, fullScript, musicPrompt } : null);
     } catch (e: any) {
-        console.error(e);
-        setError(`Gagal membuat ulang script: ${e.message}`);
+        handleApiError(e);
     } finally {
         setIsLoading(false);
     }
-  }, [lastRequest]);
+  }, [apiKey, lastRequest]);
 
   return (
     <>
+      {isKeyModalOpen && <ApiKeyModal onSave={handleSaveApiKey} />}
       <div className="min-h-screen bg-gray-900 text-gray-100 font-sans flex flex-col">
         <header className="bg-gray-800/30 backdrop-blur-sm shadow-lg p-4 sticky top-0 z-10 flex-shrink-0">
           <h1 className="text-2xl font-bold text-center text-white tracking-wider">
@@ -150,7 +181,7 @@ const App: React.FC = () => {
 
         <main className="grid grid-cols-1 lg:grid-cols-5 gap-6 p-4 lg:p-6 max-w-screen-2xl mx-auto w-full flex-grow">
           <div className="lg:col-span-2 h-full min-h-0">
-            <ControlPanel isLoading={isLoading || regeneratingFrameId !== null} onSubmit={handleGenerate} />
+            <ControlPanel isLoading={isLoading || regeneratingFrameId !== null} onSubmit={handleGenerate} isReady={!!apiKey} />
           </div>
           <div className="lg:col-span-3 h-full min-h-0">
             <StoryboardPreview 

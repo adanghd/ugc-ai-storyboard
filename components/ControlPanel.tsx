@@ -5,6 +5,7 @@ import { SparklesIcon, UploadIcon, ChevronDownIcon } from './icons';
 
 interface ControlPanelProps {
   isLoading: boolean;
+  isReady: boolean;
   onSubmit: (data: {
     productUrl: string;
     targetAudience: string;
@@ -107,7 +108,7 @@ const AspectRatioDropdown: React.FC<{
     );
 };
 
-export const ControlPanel: React.FC<ControlPanelProps> = ({ isLoading, onSubmit }) => {
+export const ControlPanel: React.FC<ControlPanelProps> = ({ isLoading, isReady, onSubmit }) => {
   const [productUrl, setProductUrl] = useState('');
   const [targetAudience, setTargetAudience] = useState('');
   const [styleConcept, setStyleConcept] = useState('');
@@ -141,6 +142,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({ isLoading, onSubmit 
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isReady) return;
     onSubmit({
       productUrl, targetAudience, styleConcept, frameCount, aspectRatio,
       modelImage, productImage, combinedImage, uploadMode,
@@ -233,9 +235,9 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({ isLoading, onSubmit 
           </div>
       </div>
       
-      <button type="submit" disabled={isLoading} className="mt-6 flex-shrink-0 w-full flex justify-center items-center gap-2 py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 focus:ring-indigo-500 disabled:bg-indigo-900 disabled:cursor-not-allowed disabled:text-gray-400">
+      <button type="submit" disabled={!isReady || isLoading} className="mt-6 flex-shrink-0 w-full flex justify-center items-center gap-2 py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900 focus:ring-indigo-500 disabled:bg-indigo-900 disabled:cursor-not-allowed disabled:text-gray-400">
         <SparklesIcon className="w-5 h-5"/>
-        {isLoading ? 'Sedang Membuat...' : 'Generate Storyboard UGC AI'}
+        {isReady ? (isLoading ? 'Sedang Membuat...' : 'Generate Storyboard UGC AI') : 'Masukkan API Key'}
       </button>
     </form>
   );
