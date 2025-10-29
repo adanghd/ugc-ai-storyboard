@@ -1,0 +1,5 @@
+{
+  "name": "UGC AI Storyboard Builder",
+  "description": "An AI-powered tool to generate storyboards for UGC-style marketing videos. Users can input product links, upload model/product images, and receive a complete storyboard with AI-generated images and scripts tailored for platforms like TikTok and Shopee.",
+  "requestFramePermissions": []
+}
